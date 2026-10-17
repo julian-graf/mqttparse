@@ -1,0 +1,17 @@
+[package]
+name = "mqttparse"
+version = "0.0.0"
+authors = ["Julian Graf <julian.jg.graf@gmail.com>"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "A flexible push parser for the MQTT protocol"
+repository = "https://github.com/julian-graf/mqttparse"
+readme = "README.md"
+keywords = ["mqtt", "parser", "no_std", "async", "embedded"]
+categories = ["network-programming", "no-std", "parser-implementations", "embedded"]
+rust-version = "1.85"
+
+
+[features]
+
+[dev-dependencies]
