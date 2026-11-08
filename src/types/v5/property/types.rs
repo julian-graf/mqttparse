@@ -1,0 +1,119 @@
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(u8)]
+pub enum PropertyType {
+    /// PUBLISH, Will Properties
+    PayloadFormatIndicator = 0x01,
+
+    /// PUBLISH, Will Properties
+    MessageExpiryInterval = 0x02,
+
+    /// PUBLISH, Will Properties
+    ContentType = 0x03,
+
+    /// PUBLISH, Will Properties
+    ResponseTopic = 0x08,
+
+    /// PUBLISH, Will Properties
+    CorrelationData = 0x09,
+
+    /// PUBLISH, SUBSCRIBE
+    SubscriptionIdentifier = 0x0B,
+
+    /// CONNECT, CONNACK, DISCONNECT
+    SessionExpiryInterval = 0x11,
+
+    /// CONNACK
+    AssignedClientIdentifier = 0x12,
+
+    /// CONNACK
+    ServerKeepAlive = 0x13,
+
+    /// CONNECT, CONNACK, AUTH
+    AuthenticationMethod = 0x15,
+
+    /// CONNECT, CONNACK, AUTH
+    AuthenticationData = 0x16,
+
+    /// CONNECT
+    RequestProblemInformation = 0x17,
+
+    /// Will Properties
+    WillDelayInterval = 0x18,
+
+    /// CONNECT
+    RequestResponseInformation = 0x19,
+
+    /// CONNACK
+    ResponseInformation = 0x1A,
+
+    /// CONNACK, DISCONNECT
+    ServerReference = 0x1C,
+
+    /// CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, SUBACK, UNSUBACK, DISCONNECT, AUTH
+    ReasonString = 0x1F,
+
+    /// CONNECT, CONNACK
+    ReceiveMaximum = 0x21,
+
+    /// CONNECT, CONNACK
+    TopicAliasMaximum = 0x22,
+
+    /// PUBLISH
+    TopicAlias = 0x23,
+
+    /// CONNACK
+    MaximumQoS = 0x24,
+
+    /// CONNACK
+    RetainAvailable = 0x25,
+
+    /// CONNECT, CONNACK, PUBLISH, Will Properties, PUBACK, PUBREC, PUBREL, PUBCOMP, SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK, DISCONNECT, AUTH
+    UserProperty = 0x26,
+
+    /// CONNECT, CONNACK
+    MaximumPacketSize = 0x27,
+
+    /// CONNACK
+    WildcardSubscriptionAvailable = 0x28,
+
+    /// CONNACK
+    SubscriptionIdentifierAvailable = 0x29,
+
+    /// CONNACK
+    SharedSubscriptionAvailable = 0x2A,
+}
+
+impl PropertyType {
+    pub const fn from_identifier(identifier: u8) -> Option<Self> {
+        Some(match identifier {
+            0x01 => Self::PayloadFormatIndicator,
+            0x02 => Self::MessageExpiryInterval,
+            0x03 => Self::ContentType,
+            0x08 => Self::ResponseTopic,
+            0x09 => Self::CorrelationData,
+            0x0B => Self::SubscriptionIdentifier,
+            0x11 => Self::SessionExpiryInterval,
+            0x12 => Self::AssignedClientIdentifier,
+            0x13 => Self::ServerKeepAlive,
+            0x15 => Self::AuthenticationMethod,
+            0x16 => Self::AuthenticationData,
+            0x17 => Self::RequestProblemInformation,
+            0x18 => Self::WillDelayInterval,
+            0x19 => Self::RequestResponseInformation,
+            0x1A => Self::ResponseInformation,
+            0x1C => Self::ServerReference,
+            0x1F => Self::ReasonString,
+            0x21 => Self::ReceiveMaximum,
+            0x22 => Self::TopicAliasMaximum,
+            0x23 => Self::TopicAlias,
+            0x24 => Self::MaximumQoS,
+            0x25 => Self::RetainAvailable,
+            0x26 => Self::UserProperty,
+            0x27 => Self::MaximumPacketSize,
+            0x28 => Self::WildcardSubscriptionAvailable,
+            0x29 => Self::SubscriptionIdentifierAvailable,
+            0x2A => Self::SharedSubscriptionAvailable,
+            _ => return None,
+        })
+    }
+}

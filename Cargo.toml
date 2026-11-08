@@ -8,10 +8,24 @@ description = "A flexible push parser for the MQTT protocol"
 repository = "https://github.com/julian-graf/mqttparse"
 readme = "README.md"
 keywords = ["mqtt", "parser", "no_std", "async", "embedded"]
-categories = ["network-programming", "no-std", "parser-implementations", "embedded"]
+categories = [
+    "network-programming",
+    "no-std",
+    "parser-implementations",
+    "embedded",
+]
 rust-version = "1.85"
 
+[dependencies]
+bytes = "1.12.1"
+heapless = { version = "0.9.1", optional = true }
 
 [features]
+default = ["alloc", "heapless"]
+
+alloc = []
+std = ["alloc"]
+
+heapless = ["dep:heapless"]
 
 [dev-dependencies]
