@@ -36,6 +36,8 @@ fn main() {
         println!("{:#?}", publish);
 
         println!("{}", core::str::from_utf8(publish.message).unwrap());
+
+        // server_parser.parse_header(data)
     }
 
     {

@@ -156,9 +156,9 @@ impl TryInto<usize> for VarByteInt {
         usize::try_from(self.0)
     }
 }
-impl Into<u32> for VarByteInt {
-    fn into(self) -> u32 {
-        self.0
+impl From<VarByteInt> for u32 {
+    fn from(value: VarByteInt) -> Self {
+        value.0
     }
 }
 impl TryInto<u16> for VarByteInt {

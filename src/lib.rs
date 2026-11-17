@@ -13,7 +13,6 @@ use crate::{base::ParserBase, types::VarByteInt};
 
 mod base;
 mod err;
-mod iter;
 
 pub use err::{Error, ErrorCategory};
 pub mod types;
@@ -25,6 +24,16 @@ pub mod v5;
 /// data is not considered invalid, and so will not return an error, but rather
 /// a `Ok(Status::Partial)`.
 pub type Result<T> = core::result::Result<Status<T>, Error>;
+
+pub trait MapExt<T> {
+    fn map_status<U>(self, map: impl FnOnce(T) -> U) -> Result<U>;
+}
+
+impl<T> MapExt<T> for Result<T> {
+    fn map_status<U>(self, map: impl FnOnce(T) -> U) -> Result<U> {
+        self.map(|status| status.map(map))
+    }
+}
 
 /// The result of a successful parse pass.
 ///
@@ -40,6 +49,13 @@ pub enum Status<T> {
 }
 
 impl<T> Status<T> {
+    pub fn map<U>(self, map: impl FnOnce(T) -> U) -> Status<U> {
+        match self {
+            Status::Complete(value) => Status::Complete(map(value)),
+            Status::Partial => Status::Partial,
+        }
+    }
+
     /// Convenience method to check if status is complete.
     #[inline]
     pub fn is_complete(&self) -> bool {
@@ -75,24 +91,3 @@ pub struct Header<T> {
     flags: u8,
     remaining_len: VarByteInt,
 }
-
-// pub type ClientPacket = Packet<Client>;
-
-// pub fn parse_client_header(data: &[u8]) -> Result<Header<ClientPacketType>> {
-//     todo!()
-// }
-// pub fn parse_client_packet<B: ParserBase>(data: B) -> Result<ClientPacket> {
-//     todo!()
-// }
-// pub fn parse_client_connect<B: ParserBase>(data: B) -> Result<Connect> {
-//     todo!()
-// }
-// pub fn parse_server_connect<B: ParserBase>(data: B) -> Result<Connack> {
-//     todo!()
-// }
-// pub fn parse_client_publish<B: ParserBase>(data: B) -> Result<Publish> {
-//     todo!()
-// }
-// pub fn parse_server_publish<B: ParserBase>(data: B) -> Result<Publish> {
-//     todo!()
-// }

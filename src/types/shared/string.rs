@@ -107,7 +107,6 @@ impl<B: StableRef> MqttString<B> {
     /// * [`MqttStringError::Utf8Error`] if `b` is not valid UTF-8.
     /// * [`MqttStringError::NullCharacter`] if `b` contains an ASCII `\0` character.
     /// * [`MqttStringError::TooLargeToEncode`] if `b`'s length exceeds [`MqttString::MAX_LENGTH`].
-    #[must_use]
     pub fn new(b: MqttBinary<B>) -> Result<Self, MqttStringError> {
         if b.as_bytes().contains(&0) {
             return Err(MqttStringError::NullCharacter);

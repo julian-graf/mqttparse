@@ -48,7 +48,9 @@ impl<B: StableRef> core::fmt::Debug for TopicReference<B> {
         match self {
             Self::Name(name) => f.debug_tuple("Name").field(name).finish(),
             Self::Alias(alias) => f.debug_tuple("Alias").field(alias).finish(),
-            Self::Mapping(name, alias) => f.debug_tuple("Mapping").field(name).field(alias).finish(),
+            Self::Mapping(name, alias) => {
+                f.debug_tuple("Mapping").field(name).field(alias).finish()
+            }
         }
     }
 }

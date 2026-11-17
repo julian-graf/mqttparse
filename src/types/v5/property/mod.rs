@@ -20,6 +20,8 @@ where
     type Inner;
 }
 
+pub struct PropertyError<E>(pub(crate) E);
+
 pub trait OnceHelper<B> {
     fn set(&mut self, b: &mut B) -> Result<(), Error>;
 }

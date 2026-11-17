@@ -47,7 +47,6 @@ impl<B: StableRef> TopicName<B> {
     }
 
     /// Creates a new topic name while checking for correct syntax of the topic name string.
-    #[must_use]
     pub fn new(string: MqttString<B>) -> Result<Self, TopicNameError> {
         Self::is_valid(&string).map(|_| Self(string))
     }
@@ -261,7 +260,9 @@ impl<B: StableRef> TopicFilter<B> {
 
 impl<B: StableRef> core::fmt::Debug for TopicFilter<B> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("TopicFilter").field(&self.0.as_str()).finish()
+        f.debug_tuple("TopicFilter")
+            .field(&self.0.as_str())
+            .finish()
     }
 }
 impl<B> AsRef<MqttString<B>> for TopicFilter<B> {

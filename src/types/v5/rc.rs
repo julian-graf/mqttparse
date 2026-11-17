@@ -1,11 +1,61 @@
+#[macro_export]
+macro_rules! reason_code {
+    (ReasonCode { $($(#[$attr:meta])* $variant:ident = $value:expr),+ $(,)? }) => {
+        $crate::reason_code!(@generate ReasonCode {
+            $($(#[$attr])* $variant = $value),+
+        });
+    };
+    ($name:ident { $($(#[$attr:meta])* $variant:ident = $value:expr),+ $(,)? }) => {
+        $crate::reason_code!(@generate $name {
+            $($(#[$attr])* $variant = $value),+
+        });
+
+        impl From<$name> for $crate::types::v5::ReasonCode {
+            fn from(value: $name) -> Self {
+                Self::from_identifier(value as u8).unwrap()
+            }
+        }
+    };
+    (@generate $name:ident {
+        $($(#[$attr:meta])* $variant:ident = $value:expr),+ $(,)?
+    }) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[repr(u8)]
+        pub enum $name {
+            $($(#[$attr])* $variant = $value),+
+        }
+
+        impl $name {
+            pub fn from_identifier(value: u8) -> Option<Self> {
+                Some(match value {
+                    $($value => Self::$variant,)+
+                    _ => return None,
+                })
+            }
+        }
+
+        impl<B: $crate::base::ParserBase> $crate::base::FromParserBase<B> for $name {
+            type Error = $crate::base::ReasonCodeError;
+
+            fn parse(b: &mut B) -> Result<Self, Self::Error> {
+                <u8 as $crate::base::FromParserBase<B>>::parse(b)
+                    .map_err(|_| $crate::base::ReasonCodeError::TooShort)
+                    .and_then(|i| {
+                        Self::from_identifier(i)
+                            .ok_or($crate::base::ReasonCodeError::InvalidIdentifier)
+                    })
+            }
+        }
+    };
+}
+
 /// A Reason Code is a variable byte integer encoded value that indicates the result of an operation.
 ///
 /// The CONNACK, PUBACK, PUBREC, PUBREL, PUBCOMP, DISCONNECT and AUTH Control Packets have
 /// a single Reason Code as part of the Variable Header. The SUBACK and UNSUBACK packets
 /// contain a list of one or more Reason Codes in the Payload.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
-pub enum ReasonCode {
+reason_code! {
+    ReasonCode {
     /// - CONNACK: The Connection is accepted.
     /// - PUBACK: The message is accepted. Publication of the QoS 1 message proceeds.
     /// - PUBREC: The message is accepted. Publication of the QoS 2 message proceeds.
@@ -39,7 +89,6 @@ pub enum ReasonCode {
     /// - AUTH: Initiate a re-authentication.
     ReAuthenticate = 0x19,
 
-    #[default]
     /// - CONNACK: The Server does not wish to reveal the reason for the failure, or none of the other Reason Codes apply.
     /// - PUBACK: The receiver does not accept the publish but either does not want to reveal the reason, or it does not match one of the other values.
     /// - PUBREC: The receiver does not accept the publish but either does not want to reveal the reason, or it does not match one of the other values.
@@ -187,4 +236,4 @@ pub enum ReasonCode {
     /// - SUBACK: The Server does not support Wildcard Subscriptions; the subscription is not accepted.
     /// - DISCONNECT (Server only): The Server does not support Wildcard Subscriptions; the subscription is not accepted.
     WildcardSubscriptionsNotSupported = 0xA2,
-}
+}}

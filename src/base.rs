@@ -1,11 +1,8 @@
 use core::{hint::assert_unchecked, num::NonZero};
 
-use crate::{
-    types::{
-        MqttBinary, MqttString, MqttStringError, PacketIdentifier, TopicName, VarByteInt,
-        v5::{MqttStringPair, property::PropertyType},
-    },
-    v5::{NeverSubscriptionIdentifier, NeverSubscriptionIdentifierError},
+use crate::types::{
+    MqttBinary, MqttString, MqttStringError, PacketIdentifier, TopicName, VarByteInt,
+    v5::{MqttStringPair, property::PropertyType},
 };
 
 /// Marker trait establishing that [`AsRef::as_ref`] always returns
@@ -117,12 +114,9 @@ pub enum PropertyTypeError {
     TooShort,
     InvalidIdentifier,
 }
-
-impl<B: ParserBase> FromParserBase<B> for NeverSubscriptionIdentifier {
-    type Error = NeverSubscriptionIdentifierError;
-    fn parse(b: &mut B) -> Result<Self, Self::Error> {
-        Err(NeverSubscriptionIdentifierError)
-    }
+pub enum ReasonCodeError {
+    TooShort,
+    InvalidIdentifier,
 }
 
 impl<B: ParserBase, const N: usize> FromParserBase<B> for [u8; N] {

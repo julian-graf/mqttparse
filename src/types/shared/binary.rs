@@ -74,7 +74,6 @@ impl<B: StableRef> MqttBinary<B> {
     /// # Errors
     ///
     /// Returns [`TooLargeToEncode`] if `bytes`' length exceeds [`MqttBinary::MAX_LENGTH`].
-    #[must_use]
     pub fn new(bytes: B) -> Result<Self, TooLargeToEncode> {
         match bytes.as_ref().len() {
             ..=Self::MAX_LENGTH => Ok(Self(bytes)),

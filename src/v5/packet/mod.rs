@@ -1,74 +1,65 @@
 use crate::{
     base::{ParserBase, Storage},
-    types::{
-        IdentifiedQoS,
-        v5::{
-            TopicReference,
-            property::{
-                ContentType, CorrelationData, MessageExpiryInterval, PayloadFormatIndicator,
-                ResponseTopic, SubscriptionIdentifier, UserProperty,
-            },
-        },
-    },
-    v5::Role,
+    types::v5::property::UserProperty,
+    v5::role::Role,
 };
 
-// pub enum Packet<FROM: Role<S> + ?Sized, T, S: Storage<T>> {
-//     PhantomVariant(T, !),
-//     Connect(PEER::PeerConnect<S>),
-//     Connack(PEER::PeerConnack<S>),
-//     Publish(PEER::PeerPublish<S>),
-//     Puback(PEER::PeerPuback<S>),
-//     Pubrec(PEER::PeerPubrec<S>),
-//     Pubrel(PEER::PeerPubrel<S>),
-//     Pubcomp(PEER::PeerPubcomp<S>),
-//     Subscribe(PEER::PeerSubscribe<S>),
-//     Suback(PEER::PeerSuback<S>),
-//     Unsubscribe(PEER::PeerUnsubscribe<S>),
-//     Unsuback(PEER::PeerUnsuback<S>),
-//     Pingreq(PEER::PeerPingreq<S>),
-//     Pingresp(PEER::PeerPingresp<S>),
-//     Disconnect(PEER::PeerDisconnect<S>),
-//     Auth(PEER::PeerAuth<S>),
-// }
+mod auth;
+mod connack;
+mod connect;
+mod disconnect;
+mod pingreq;
+mod pingresp;
+mod pubacks;
+mod publish;
+mod subacks;
+mod subscribe;
+mod unsubscribe;
 
-pub struct Connect {}
-pub struct Connack {}
+pub use auth::{Auth, ClientAuthReasonCode, ServerAuthReasonCode};
+pub use connack::{Connack, ConnackReasonCode};
+pub use connect::Connect;
+pub use disconnect::{ClientDisconnectReasonCode, Disconnect, ServerDisconnectReasonCode};
+pub use pingreq::Pingreq;
+pub use pingresp::Pingresp;
+pub use pubacks::{
+    GenericPuback, OmissibleReasonCode, PubackPacketType, parse_generic_puback,
+    puback::{ClientPubackReasonCode, Puback, ServerPubackReasonCode},
+    pubcomp::{Pubcomp, PubcompReasonCode},
+    pubrec::{ClientPubrecReasonCode, Pubrec, ServerPubrecReasonCode},
+    pubrel::{Pubrel, PubrelReasonCode},
+};
+pub use publish::Publish;
+pub use subacks::{
+    GenericSuback,
+    suback::{Suback, SubackReasonCode},
+    unsuback::{Unsuback, UnsubackReasonCode},
+};
+pub use subscribe::Subscribe;
+pub use unsubscribe::Unsubscribe;
 
-
-#[derive(Debug, Clone)]
-pub struct Publish<
-    B: ParserBase,
-    SubscriptionIdentifier,
-    SubscriptionIdentifierStorage: Storage<Element = SubscriptionIdentifier>,
-    UserPropertyStorage: Storage<Element = UserProperty<B>>,
-> {
-    pub dup: bool,
-    pub identified_qos: IdentifiedQoS,
-    pub retain: bool,
-
-    pub topic: TopicReference<B>,
-
-    // TODO clarify whether PayloadFormatIndicator can be included only once
-    pub payload_format_indicator: Option<PayloadFormatIndicator>,
-    // TODO clarify whether MessageExpiryInterval can be included only once
-    pub message_expiry_interval: Option<MessageExpiryInterval>,
-    pub response_topic: Option<ResponseTopic<B>>,
-    pub correlation_data: Option<CorrelationData<B>>,
-    pub user_properties: UserPropertyStorage,
-    pub subscription_identifiers: SubscriptionIdentifierStorage,
-    pub content_type: Option<ContentType<B>>,
-    pub message: B,
+pub enum Packet<FROM: Role + ?Sized, B: ParserBase, UPS, SIS, SRCS, URCS> {
+    Connect(FROM::Connect),
+    Connack(FROM::Connack<B, UPS>),
+    Publish(Publish<B, SIS, UPS>),
+    Puback(Puback<B, FROM::PubackReasonCode<B>, UPS>),
+    Pubrec(Pubrec<B, FROM::PubrecReasonCode<B>, UPS>),
+    Pubrel(Pubrel<B, UPS>),
+    Pubcomp(Pubcomp<B, UPS>),
+    Subscribe(FROM::Subscribe),
+    Suback(FROM::Suback<B, UPS, SRCS>),
+    Unsubscribe(FROM::Unsubscribe),
+    Unsuback(FROM::Unsuback<B, UPS, URCS>),
+    Pingreq(FROM::Pingreq),
+    Pingresp(FROM::Pingresp),
+    Disconnect(
+        Disconnect<
+            B,
+            FROM::DisconnectReasonCode<B>,
+            FROM::DisconnectSessionExpiryInterval<B>,
+            FROM::DisconnectServerReference<B>,
+            UPS,
+        >,
+    ),
+    Auth(Auth<FROM::AuthReasonCode<B>>),
 }
-pub struct Puback {}
-pub struct Pubrec {}
-pub struct Pubrel {}
-pub struct Pubcomp {}
-pub struct Subscribe {}
-pub struct Suback {}
-pub struct Unsubscribe {}
-pub struct Unsuback {}
-pub struct Pingreq {}
-pub struct Pingresp {}
-pub struct Disconnect {}
-pub struct Auth {}

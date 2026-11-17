@@ -15,8 +15,11 @@ use crate::{
         },
     },
     v5::{
-        packet::{Connect, Publish},
-        roles::Role,
+        packet::{
+            Auth, Connack, Connect, Disconnect, Packet, Puback, Pubcomp, Publish, Pubrec, Pubrel,
+            Suback, SubackReasonCode, Subscribe, Unsuback, UnsubackReasonCode, Unsubscribe,
+        },
+        role::Role,
     },
 };
 
@@ -24,16 +27,20 @@ mod client;
 mod server;
 
 pub mod packet;
-pub mod roles;
+pub mod role;
 
-pub use client::{Client, NeverSubscriptionIdentifier, NeverSubscriptionIdentifierError};
+pub use client::Client;
 pub use server::Server;
-
-pub enum ServerPacketType {}
 
 #[derive(Clone, Copy)]
 pub struct Parser<PEER> {
     _phantom_data: PhantomData<(PEER)>,
+}
+
+impl<PEER: Role> Default for Parser<PEER> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<PEER: Role> Parser<PEER> {
@@ -63,187 +70,185 @@ impl<PEER: Role> Parser<PEER> {
         }))
     }
 
+    pub fn parse<B, UPS, SIS, SRCS, URCS>(
+        self,
+        data: B,
+    ) -> Result<Packet<PEER, B, UPS, SIS, SRCS, URCS>>
+    where
+        B: ParserBase,
+        UPS: Storage<Element = UserProperty<B>>,
+        SIS: Storage<Element = PEER::PublishSubscriptionIdentifier<B>>,
+        SRCS: Storage<Element = SubackReasonCode>,
+        URCS: Storage<Element = UnsubackReasonCode>,
+    {
+        PEER::parse(data)
+    }
+
+    pub(crate) fn parse_packet_header<B: ParserBase>(
+        data: B,
+    ) -> Result<(Header<PEER::PacketType>, B)> {
+        if data.len() < 2 {
+            return Ok(Status::Partial);
+        }
+
+        let packet_type = PEER::packet_type(data.as_ref()[0])?;
+        let flags = data.as_ref()[0] & 0x0F;
+        let (remaining_len, remaining_len_bytes) =
+            match VarByteInt::parse_remaining_length(&data.as_ref()[1..])? {
+                Status::Complete(value) => value,
+                Status::Partial => return Ok(Status::Partial),
+            };
+
+        let mut data = data;
+        data.advance(1 + remaining_len_bytes);
+
+        Ok(Status::Complete((
+            Header {
+                packet_type,
+                flags,
+                remaining_len,
+            },
+            data,
+        )))
+    }
+
     pub fn parse_publish<
         B: ParserBase,
-        SubscriptionIdentifierStorage: Storage<Element = PEER::PublishSubscriptionIdentifier<B>>,
-        UserPropertyStorage: Storage<Element = UserProperty<B>>,
+        SIS: Storage<Element = PEER::PublishSubscriptionIdentifier<B>>,
+        UPS: Storage<Element = UserProperty<B>>,
     >(
         self,
         header: Header<PEER::PacketType>,
         mut data: B,
-    ) -> Result<
-        Publish<
-            B,
-            PEER::PublishSubscriptionIdentifier<B>,
-            SubscriptionIdentifierStorage,
-            UserPropertyStorage,
-        >,
-    > {
-        let len: usize = header
-            .remaining_len
-            .try_into()
-            .map_err(|_| Error::PacketTooLarge)?;
-
-        // qos, retain, dup
-        let dup = header.flags >> 3 == 1;
-
-        let qos = match header.flags & 0x06 {
-            0x00 => QoS::AtMostOnce,
-            0x02 => QoS::AtLeastOnce,
-            0x04 => QoS::ExactlyOnce,
-            _ => return Err(Error::InvalidFixedHeaderFlags),
-        };
-        let retain = header.flags & 0x01 == 1;
-
-        let mut backing = match data.split_to_checked(len) {
-            Some(d) => d,
-            None => return Ok(Status::Partial),
-        };
-        let data = &mut backing;
-
-        let topic_name = MqttString::parse(data)?;
-        let topic_name = if topic_name.is_empty() {
-            None
-        } else {
-            Some(TopicName::new(topic_name).map_err(|e| match e {
-                TopicNameError::Empty => unreachable!(),
-                TopicNameError::Wildcard => Error::InvalidTopicName,
-            })?)
-        };
-
-        let identified_qos = match qos {
-            QoS::AtMostOnce => IdentifiedQoS::AtMostOnce,
-            QoS::AtLeastOnce => IdentifiedQoS::AtLeastOnce(PacketIdentifier::parse(data)?),
-            QoS::ExactlyOnce => IdentifiedQoS::ExactlyOnce(PacketIdentifier::parse(data)?),
-        };
-
-        let properties_length: usize = VarByteInt::parse(data)?
-            .try_into()
-            .map_err(|_| Error::InvalidPropertyLength)?;
-        let mut properties_data = data
-            .split_to_checked(properties_length)
-            .ok_or(Error::InvalidPropertyLength)?;
-        let properties_data = &mut properties_data;
-
-        let mut payload_format_indicator: Option<PayloadFormatIndicator> = None;
-        let mut message_expiry_interval: Option<MessageExpiryInterval> = None;
-        let mut topic_alias: Option<TopicAlias> = None;
-        let mut response_topic: Option<ResponseTopic<B>> = None;
-        let mut correlation_data: Option<CorrelationData<B>> = None;
-        let mut user_properties = UserPropertyStorage::default();
-        let mut subscription_identifiers = SubscriptionIdentifierStorage::default();
-        let mut content_type: Option<ContentType<B>> = None;
-
-        // TODO convert RemainingLengthExceeded to PropertyLengthExceeded here
-        while properties_data.len() > 0 {
-            let property_type = PropertyType::parse(properties_data)?;
-
-            match property_type {
-                PropertyType::PayloadFormatIndicator => {
-                    payload_format_indicator.set(properties_data)?;
-                }
-                PropertyType::MessageExpiryInterval => {
-                    message_expiry_interval.set(properties_data)?;
-                }
-                PropertyType::TopicAlias => {
-                    topic_alias.set(properties_data)?;
-                }
-                PropertyType::ResponseTopic => {
-                    response_topic.set(properties_data)?;
-                }
-
-                PropertyType::CorrelationData => {
-                    correlation_data.set(properties_data)?;
-                }
-                PropertyType::UserProperty => {
-                    let user_property = UserProperty::parse(properties_data)?;
-                    if let Some(limit) = UserPropertyStorage::LIMIT
-                        && user_properties.len() == limit
-                    {
-                        // Storage is full
-                    } else {
-                        user_properties.extend(Some(user_property));
-                    }
-                }
-                PropertyType::SubscriptionIdentifier => {
-                    let subscription_identifier =
-                        PEER::PublishSubscriptionIdentifier::parse(properties_data)
-                            .map_err(Into::into)?;
-                    if let Some(limit) = SubscriptionIdentifierStorage::LIMIT
-                        && user_properties.len() == limit
-                    {
-                        // Storage is full
-                    } else {
-                        subscription_identifiers.extend(Some(subscription_identifier));
-                    }
-                }
-
-                PropertyType::ContentType => {
-                    content_type.set(properties_data)?;
-                }
-                p => {
-                    // Malformed packet according to <https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901029>
-                    return Err(Error::InvalidPropertyType);
-                }
-            }
-        }
-
-        let topic = match (topic_name, topic_alias) {
-            (None, None) => return Err(Error::InvalidTopicName),
-            (None, Some(alias)) => TopicReference::Alias(alias.into()),
-            (Some(name), None) => TopicReference::Name(name),
-            (Some(name), Some(alias)) => TopicReference::Mapping(name, alias.into()),
-        };
-
-        let message = backing;
-
-        Ok(Status::Complete(Publish {
-            dup,
-            identified_qos,
-            retain,
-            topic,
-            payload_format_indicator,
-            message_expiry_interval,
-            response_topic,
-            correlation_data,
-            user_properties,
-            subscription_identifiers,
-            content_type,
-            message,
-        }))
+    ) -> Result<Publish<B, SIS, UPS>> {
+        PEER::parse_publish(header, data)
     }
 
-    // pub fn parse<B: ParserBase>(self, data: B) -> Result<Packet<PEER>> {
-    //     let bytes = data.as_ref();
+    pub fn parse_connect<B: ParserBase>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Connect> {
+        PEER::parse_connect(header, data)
+    }
 
-    //     if bytes.len() < 2 {
-    //         return Ok(Status::Partial);
-    //     }
+    pub fn parse_connack<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Connack<B, UPS>> {
+        PEER::parse_connack(header, data)
+    }
 
-    //     let packet_type = PEER::packet_type(bytes[0])?;
-    //     let flags = bytes[0] & 0x0F;
+    pub fn parse_puback<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<Puback<B, PEER::PubackReasonCode<B>, UPS>> {
+        PEER::parse_puback(header, data)
+    }
 
-    //     let (remaining_len, header_len) = match parse_varbyteint(&bytes[1..])? {
-    //         Status::Complete(i) => i,
-    //         Status::Partial => return Ok(Status::Partial),
-    //     };
+    pub fn parse_pubrec<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<Pubrec<B, PEER::PubrecReasonCode<B>, UPS>> {
+        PEER::parse_pubrec(header, data)
+    }
 
-    //     let remaining_len = usize::try_from(remaining_len).map_err(|_| Error::PacketTooLarge)?;
+    pub fn parse_pubrel<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<Pubrel<B, UPS>> {
+        PEER::parse_pubrel(header, data)
+    }
 
-    //     let post_header = &bytes[header_len..];
+    pub fn parse_pubcomp<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<Pubcomp<B, UPS>> {
+        PEER::parse_pubcomp(header, data)
+    }
 
-    //     let Some(remaining) = post_header.get(remaining_len) else {
-    //         return Ok(Status::Partial);
-    //     };
+    pub fn parse_subscribe<B: ParserBase>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Subscribe> {
+        PEER::parse_subscribe(header, data)
+    }
 
-    //     todo!()
-    // }
+    pub fn parse_suback<
+        B: ParserBase,
+        UPS: Storage<Element = UserProperty<B>>,
+        RCS: Storage<Element = SubackReasonCode>,
+    >(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Suback<B, UPS, RCS>> {
+        PEER::parse_suback(header, data)
+    }
 
-    // pub fn parse_connect<B: ParserBase>(
-    //     self,
-    //     header: Header<PEER::PacketType>,
-    //     data: B,
-    // ) -> Result<PEER::ConnectPacket> {
-    //     todo!()
-    // }
+    pub fn parse_unsubscribe<B: ParserBase>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Unsubscribe> {
+        PEER::parse_unsubscribe(header, data)
+    }
+
+    pub fn parse_unsuback<
+        B: ParserBase,
+        UPS: Storage<Element = UserProperty<B>>,
+        RCS: Storage<Element = UnsubackReasonCode>,
+    >(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Unsuback<B, UPS, RCS>> {
+        PEER::parse_unsuback(header, data)
+    }
+
+    pub fn parse_pingreq<B: ParserBase>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Pingreq> {
+        PEER::parse_pingreq(header, data)
+    }
+
+    pub fn parse_pingresp<B: ParserBase>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<PEER::Pingresp> {
+        PEER::parse_pingresp(header, data)
+    }
+
+    pub fn parse_disconnect<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<
+        Disconnect<
+            B,
+            PEER::DisconnectReasonCode<B>,
+            PEER::DisconnectSessionExpiryInterval<B>,
+            PEER::DisconnectServerReference<B>,
+            UPS,
+        >,
+    > {
+        PEER::parse_disconnect(header, data)
+    }
+
+    pub fn parse_auth<B: ParserBase>(
+        self,
+        header: Header<PEER::PacketType>,
+        data: B,
+    ) -> Result<Auth<PEER::AuthReasonCode<B>>> {
+        PEER::parse_auth(header, data)
+    }
 }

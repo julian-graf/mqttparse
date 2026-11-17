@@ -46,7 +46,7 @@ pub enum Error {
     ///
     /// [`TopicName`]: crate::types::TopicName
     InvalidTopicName,
-    /// An MQTTv5 PUBLISH packet contains neither a non-empty topic name nor a topic alias
+    /// An MQTTv5 PUBLISH packet contains neither a non-empty topic name nor a topic alias.
     NoTopicNameNoAlias,
     /// A [`PacketIdentifier`] field has the value `0`.
     ///
@@ -54,6 +54,10 @@ pub enum Error {
     ZeroPacketIdentifier,
     /// An MQTTv5 packet contains an invalid property type.
     InvalidPropertyType,
+    /// An MQTTv5 packet contains a value that is not a valid reason code.
+    InvalidReasonCode,
+    /// An MQTTv5 packet contains a reason code that is not allowed in this packet type.
+    IllegalReasonCode,
     // COMPLEX VALUE ERRORS
 
     // OTHER ERRORS
@@ -63,6 +67,14 @@ pub enum Error {
     IllegalPropertyType,
     /// A property of an MQTTv5 packet is encoded incorrectly.
     InvalidProperty,
+    /// The [`MaximumQoS`] property has a value other than [`QoS::AtMostOnce`] and [`QoS::AtLeastOnce`].
+    ///
+    /// [`MaximumQoS`]: crate::types::v5::property::MaximumQoS
+    /// [`QoS::AtMostOnce`]: crate::types::QoS::AtMostOnce
+    /// [`QoS::AtLeastOnce`]: crate::types::QoS::AtLeastOnce
+    InvalidMaximumQoS,
+    /// A property exceeded the property length field of an MQTTv5 packet
+    PropertyLengthExceeded,
 }
 
 impl Error {
@@ -88,10 +100,14 @@ impl Error {
             Self::InvalidTopicName => "topic is empty or contains wildcard",
             Self::NoTopicNameNoAlias => "empty topic name without topic alias",
             Self::InvalidPropertyType => "invalid property type",
+            Self::InvalidReasonCode => "invalid reason code",
+            Self::IllegalReasonCode => "illegal reason code",
 
             Self::DuplicateProperty => "at most once property occured twice",
             Self::IllegalPropertyType => "property type not allowed",
             Self::InvalidProperty => "invalid property encoding",
+            Self::InvalidMaximumQoS => "invalid maximum qos",
+            Self::PropertyLengthExceeded => "not enough property length to parse property",
         }
     }
     #[inline]
@@ -116,12 +132,16 @@ impl Error {
             Self::InvalidTopicName => ErrorCategory::Tbd,
             Self::NoTopicNameNoAlias => ErrorCategory::ProtocolError,
             Self::InvalidPropertyType => ErrorCategory::MalformedPacket,
+            Self::InvalidReasonCode => ErrorCategory::MalformedPacket,
+            Self::IllegalReasonCode => ErrorCategory::ProtocolError,
 
             Self::DuplicateProperty => ErrorCategory::ProtocolError,
             // Malformed packet according to <https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901029>
             Self::IllegalPropertyType => ErrorCategory::MalformedPacket,
             // Malformed packet according to <https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901029>
             Self::InvalidProperty => ErrorCategory::MalformedPacket,
+            Self::InvalidMaximumQoS => ErrorCategory::ProtocolError,
+            Self::PropertyLengthExceeded => ErrorCategory::MalformedPacket,
         }
     }
 }
@@ -176,10 +196,10 @@ mod froms {
     use crate::{
         Error,
         base::{
-            BoolError, NonZeroError, PacketIdentifierError, PropertyTypeError, StringError,
-            TooShort, TopicNameError, VarByteIntError,
+            BoolError, NonZeroError, PacketIdentifierError, PropertyTypeError, ReasonCodeError,
+            StringError, TooShort, TopicNameError, VarByteIntError,
         },
-        v5::NeverSubscriptionIdentifierError,
+        types::v5::property::{MaximumQoS, MaximumQoSError, NeverPropertyError, PropertyError},
     };
 
     impl From<TooShort> for Error {
@@ -199,7 +219,7 @@ mod froms {
         fn from(e: NonZeroError) -> Self {
             match e {
                 NonZeroError::TooShort => Self::RemainingLengthExceeded,
-                NonZeroError::Zero => todo!(),
+                NonZeroError::Zero => todo!(), // Would be a protocol error in case of Receive maximum
             }
         }
     }
@@ -245,9 +265,33 @@ mod froms {
             }
         }
     }
-    impl From<NeverSubscriptionIdentifierError> for Error {
-        fn from(_: NeverSubscriptionIdentifierError) -> Self {
-            Self::InvalidProperty
+    impl From<ReasonCodeError> for Error {
+        fn from(e: ReasonCodeError) -> Self {
+            match e {
+                ReasonCodeError::TooShort => Self::RemainingLengthExceeded,
+                ReasonCodeError::InvalidIdentifier => Self::InvalidReasonCode,
+            }
+        }
+    }
+    impl From<MaximumQoSError> for Error {
+        fn from(e: MaximumQoSError) -> Self {
+            match e {
+                MaximumQoSError::TooShort => Self::RemainingLengthExceeded,
+                MaximumQoSError::IllegalValue => Self::InvalidProperty,
+            }
+        }
+    }
+    impl<E: Into<Error>> From<PropertyError<E>> for Error {
+        fn from(e: PropertyError<E>) -> Self {
+            match e.0.into() {
+                Self::RemainingLengthExceeded => Self::PropertyLengthExceeded,
+                other => other,
+            }
+        }
+    }
+    impl From<NeverPropertyError> for Error {
+        fn from(_: NeverPropertyError) -> Self {
+            Self::IllegalPropertyType
         }
     }
 }

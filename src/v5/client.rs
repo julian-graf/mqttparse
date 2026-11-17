@@ -1,127 +1,75 @@
 use core::marker::PhantomData;
 
+use super::Parser;
 use crate::{
-    Error, Result, Status::Complete, base::ParserBase, v5::{
+    Error, Header, MapExt, Result,
+    Status::{self, Complete},
+    base::{ParserBase, PropertyTypeError, Storage, TooShort},
+    types::v5::property::{
+        NeverProperty, NeverPropertyError, PropertyError, SessionExpiryInterval, UserProperty,
+    },
+    v5::{
         packet::{
-            Auth, Connack, Connect, Disconnect, Pingreq, Pingresp, Puback, Pubcomp, Publish,
-            Pubrec, Pubrel, Suback, Subscribe, Unsuback, Unsubscribe,
+            Auth, ClientAuthReasonCode, ClientDisconnectReasonCode, ClientPubackReasonCode,
+            ClientPubrecReasonCode, Connack, Connect, Disconnect, Packet, Pingreq, Pingresp,
+            Puback, Pubcomp, Publish, Pubrec, Pubrel, Suback, SubackReasonCode, Subscribe,
+            Unsuback, UnsubackReasonCode, Unsubscribe,
         },
-        roles::Role,
+        role::Role,
     },
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct Client;
-#[derive(Debug, Clone, Copy)]
-pub struct NeverSubscriptionIdentifier(!);
-#[derive(Debug, Clone, Copy)]
-pub struct NeverSubscriptionIdentifierError;
 
 #[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 pub enum ClientPacketType {
-    Connect,
-    Publish,
-    Puback,
-    Pubrec,
-    Pubrel,
-    Pubcomp,
-    Subscribe,
-    Unsubscribe,
-    Pingreq,
-    Disconnect,
-    Auth,
+    Connect = 0x10,
+    Publish = 0x30,
+    Puback = 0x40,
+    Pubrec = 0x50,
+    Pubrel = 0x60,
+    Pubcomp = 0x70,
+    Subscribe = 0x80,
+    Unsubscribe = 0xA0,
+    Pingreq = 0xC0,
+    Disconnect = 0xE0,
+    Auth = 0xF0,
+}
+
+impl Into<u8> for ClientPacketType {
+    fn into(self) -> u8 {
+        self as u8
+    }
 }
 
 impl Role for Client {
     type PacketType = ClientPacketType;
-    type PublishSubscriptionIdentifierError = NeverSubscriptionIdentifierError;
-    type PublishSubscriptionIdentifier<B: ParserBase> = NeverSubscriptionIdentifier;
 
-    // type PeerConnect<_S> = !;
-    // type PeerConnack<U> = Connack<U>;
-    // type PeerPublish<_S> = Publish;
-    // type PeerPuback<_S> = Puback;
-    // type PeerPubrec<_S> = Pubrec;
-    // type PeerPubrel<_S> = Pubrel;
-    // type PeerPubcomp<_S> = Pubcomp;
-    // type PeerSubscribe<_S> = !;
-    // type PeerSuback<_S> = Suback;
-    // type PeerUnsubscribe<_S> = !;
-    // type PeerUnsuback<_S> = Unsuback;
-    // type PeerPingreq<_S> = !;
-    // type PeerPingresp<_S> = Pingresp;
-    // type PeerDisconnect<_S> = Disconnect;
-    // type PeerAuth<_S> = Auth;
+    type Connect = Connect;
+    type Connack<B, UPS> = !;
+    type Subscribe = Subscribe;
+    type Suback<B, UPS, RCS> = !;
+    type Unsubscribe = Subscribe;
+    type Unsuback<B, UPS, RCS> = !;
+    type Pingreq = Pingreq;
+    type Pingresp = !;
 
-    // fn parse_packet(data: &[u8]) -> Result<Packet<Self, T, S>> {
-    //     todo!()
-    // }
+    type PublishSubscriptionIdentifierError = NeverPropertyError;
+    type PublishSubscriptionIdentifier<B: ParserBase> = NeverProperty;
 
-    // fn parse_connect(data: &[u8]) -> Result<!> {
-    //     Err(Error::UnexpectedPacketType)
-    // }
-    // fn parse_subscribe(data: &[u8]) -> Result<!> {
-    //     Err(Error::UnexpectedPacketType)
-    // }
-    // fn parse_unsubscribe(data: &[u8]) -> Result<!> {
-    //     Err(Error::UnexpectedPacketType)
-    // }
-    // fn parse_pingreq(data: &[u8]) -> Result<!> {
-    //     Err(Error::UnexpectedPacketType)
-    // }
+    type PubackReasonCode<B: ParserBase> = ClientPubackReasonCode;
 
-    // fn parse_connack(data: &[u8]) -> Result<Connack<S>> {
-    //     Ok(Complete(Connack {
-    //         user_properties: S::default(),
-    //     }))
-    // }
+    type PubrecReasonCode<B: ParserBase> = ClientPubrecReasonCode;
 
-    // fn parse_publish(data: &[u8]) -> Result<Publish> {
-    //     todo!()
-    // }
+    type DisconnectReasonCode<B: ParserBase> = ClientDisconnectReasonCode;
+    type DisconnectSessionExpiryIntervalError = PropertyError<TooShort>;
+    type DisconnectSessionExpiryInterval<B: ParserBase> = SessionExpiryInterval;
+    type DisconnectServerReferenceError = NeverPropertyError;
+    type DisconnectServerReference<B: ParserBase> = NeverProperty;
 
-    // fn parse_puback(data: &[u8]) -> Result<Puback> {
-    //     todo!()
-    // }
-
-    // fn parse_pubrec(data: &[u8]) -> Result<Pubrec> {
-    //     todo!()
-    // }
-
-    // fn parse_pubrel(data: &[u8]) -> Result<Pubrel> {
-    //     todo!()
-    // }
-
-    // fn parse_pubcomp(data: &[u8]) -> Result<Pubcomp> {
-    //     todo!()
-    // }
-
-    // fn parse_suback(data: &[u8]) -> Result<Suback> {
-    //     todo!()
-    // }
-
-    // fn parse_unsuback(data: &[u8]) -> Result<Unsuback> {
-    //     todo!()
-    // }
-
-    // fn parse_pingresp(data: &[u8]) -> Result<Pingresp> {
-    //     todo!()
-    // }
-
-    // fn parse_disconnect(data: &[u8]) -> Result<Disconnect> {
-    //     todo!()
-    // }
-
-    // fn parse_auth(data: &[u8]) -> Result<Auth> {
-    //     todo!()
-    // }
-
-    // const IS_SERVER: bool = false;
-
-    // type PacketType = ClientPacketType;
-    // type ConnectPacket = Connect;
-    // type ConnackPacket = !;
-    // type PublishPacket = Publish;
+    type AuthReasonCode<B: ParserBase> = ClientAuthReasonCode;
 
     fn packet_type(first_byte: u8) -> core::result::Result<Self::PacketType, Error> {
         #[rustfmt::skip]
@@ -147,5 +95,94 @@ impl Role for Client {
         };
 
         r
+    }
+
+    fn parse<B, UPS, SIS, SRCS, URCS>(data: B) -> Result<Packet<Self, B, UPS, SIS, SRCS, URCS>>
+    where
+        B: ParserBase,
+        UPS: Storage<Element = UserProperty<B>>,
+        SIS: Storage<Element = Self::PublishSubscriptionIdentifier<B>>,
+        SRCS: Storage<Element = SubackReasonCode>,
+        URCS: Storage<Element = UnsubackReasonCode>,
+    {
+        let (header, data) = match Parser::<Self>::parse_packet_header(data)? {
+            Status::Complete(value) => value,
+            Status::Partial => return Ok(Status::Partial),
+        };
+
+        #[rustfmt::skip]
+        let r = match header.packet_type {
+            ClientPacketType::Connect => Self::parse_connect(header, data).map_status(Packet::Connect),
+            ClientPacketType::Publish => Self::parse_publish(header, data).map_status(Packet::Publish),
+            ClientPacketType::Puback => Self::parse_puback(header, data).map_status(Packet::Puback),
+            ClientPacketType::Pubrec => Self::parse_pubrec(header, data).map_status(Packet::Pubrec),
+            ClientPacketType::Pubrel => Self::parse_pubrel(header, data).map_status(Packet::Pubrel),
+            ClientPacketType::Pubcomp => Self::parse_pubcomp(header, data).map_status(Packet::Pubcomp),
+            ClientPacketType::Subscribe => Self::parse_subscribe(header, data).map_status(Packet::Subscribe),
+            ClientPacketType::Unsubscribe => Self::parse_unsubscribe(header, data).map_status(Packet::Unsubscribe),
+            ClientPacketType::Pingreq => Self::parse_pingreq(header, data).map_status(Packet::Pingreq),
+            ClientPacketType::Disconnect => Self::parse_disconnect(header, data).map_status(Packet::Disconnect),
+            ClientPacketType::Auth => Self::parse_auth(header, data).map_status(Packet::Auth),
+        };
+
+        r
+    }
+
+    fn parse_connect<B: ParserBase>(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Connect> {
+        todo!()
+    }
+    fn parse_subscribe<B: ParserBase>(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Subscribe> {
+        todo!()
+    }
+    fn parse_unsubscribe<B: ParserBase>(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Unsubscribe> {
+        todo!()
+    }
+    fn parse_pingreq<B: ParserBase>(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Pingreq> {
+        todo!()
+    }
+
+    fn parse_connack<B: ParserBase, UPS>(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Connack<B, UPS>> {
+        Err(Error::UnexpectedPacketType)
+    }
+    fn parse_suback<
+        B: ParserBase,
+        UPS: Storage<Element = UserProperty<B>>,
+        RCS: Storage<Element = SubackReasonCode>,
+    >(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Suback<B, UPS, RCS>> {
+        Err(Error::UnexpectedPacketType)
+    }
+    fn parse_unsuback<
+        B: ParserBase,
+        UPS: Storage<Element = UserProperty<B>>,
+        RCS: Storage<Element = UnsubackReasonCode>,
+    >(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Unsuback<B, UPS, RCS>> {
+        Err(Error::UnexpectedPacketType)
+    }
+    fn parse_pingresp<B: ParserBase>(
+        header: Header<Self::PacketType>,
+        data: B,
+    ) -> Result<Self::Pingresp> {
+        Err(Error::UnexpectedPacketType)
     }
 }
