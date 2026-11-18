@@ -1,13 +1,11 @@
 use crate::{
-    base::{ParserBase, Storage},
-    reason_code,
-    types::v5::property::{ReasonString, UserProperty},
+    base::{ParserBase, Storage}, reason_code, types::v5::property::{ReasonString, UserProperty}, v5::packet::OmissibleReasonCode,
 };
 
 reason_code! {
     ClientDisconnectReasonCode {
     /// Close the connection normally. Do not send the Will Message.
-    Success = 0x00,
+    NormalDisconnection = 0x00,
 
     /// The Client wishes to disconnect but requires that the Server also publishes its Will Message.
     DisconnectWithWillMessage = 0x04,
@@ -52,7 +50,7 @@ reason_code! {
 reason_code! {
     ServerDisconnectReasonCode {
     /// Close the connection normally. Do not send the Will Message.
-    Success = 0x00,
+    NormalDisconnection = 0x00,
 
     /// The Connection is closed but the sender either does not wish to reveal the reason, or none of the other Reason Codes apply.
     UnspecifiedError = 0x80,
@@ -135,6 +133,17 @@ reason_code! {
     /// The Server does not support Wildcard Subscriptions; the subscription is not accepted.
     WildcardSubscriptionsNotSupported = 0xA2,
 }}
+
+impl OmissibleReasonCode for ClientDisconnectReasonCode {
+    fn omitted() -> Self {
+        Self::NormalDisconnection
+    }
+}
+impl OmissibleReasonCode for ServerDisconnectReasonCode {
+    fn omitted() -> Self {
+        Self::NormalDisconnection
+    }
+}
 
 pub struct Disconnect<B, RC, SessionExpiryInterval, ServerReference, UPS> {
     pub reason_code: RC,

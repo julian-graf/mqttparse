@@ -1,13 +1,14 @@
 use crate::{
     Error, Header, Result, Status,
-    base::{FromParserBase, ParserBase, Storage},
+    base::{FromParserBase, ParserBase, ReasonCodeError, Storage},
     types::{
         IdentifiedQoS, MqttString, PacketIdentifier, QoS, TopicName, TopicNameError, VarByteInt,
         v5::{
             TopicReference,
             property::{
                 ContentType, CorrelationData, MessageExpiryInterval, OnceHelper,
-                PayloadFormatIndicator, PropertyType, ResponseTopic, TopicAlias, UserProperty,
+                PayloadFormatIndicator, PropertyType, ReasonString, ResponseTopic, TopicAlias,
+                UserProperty,
             },
         },
     },
@@ -39,18 +40,17 @@ pub trait Role {
     type PublishSubscriptionIdentifierError: Into<Error>;
     type PublishSubscriptionIdentifier<B: ParserBase>: FromParserBase<B, Error = Self::PublishSubscriptionIdentifierError>;
 
-    type PubackReasonCode<B: ParserBase>: FromParserBase<B> + OmissibleReasonCode
-    where
-        Error: From<<<Self as Role>::PubackReasonCode<B> as FromParserBase<B>>::Error>;
+    type PubackReasonCode<B: ParserBase>: FromParserBase<B, Error = ReasonCodeError>
+        + OmissibleReasonCode;
 
-    type PubrecReasonCode<B: ParserBase>: FromParserBase<B> + OmissibleReasonCode
-    where
-        Error: From<<<Self as Role>::PubrecReasonCode<B> as FromParserBase<B>>::Error>;
+    type PubrecReasonCode<B: ParserBase>: FromParserBase<B, Error = ReasonCodeError>
+        + OmissibleReasonCode;
 
-    type DisconnectReasonCode<B: ParserBase>: FromParserBase<B>;
-    type DisconnectSessionExpiryIntervalError;
+    type DisconnectReasonCode<B: ParserBase>: FromParserBase<B, Error = ReasonCodeError>
+        + OmissibleReasonCode;
+    type DisconnectSessionExpiryIntervalError: Into<Error>;
     type DisconnectSessionExpiryInterval<B: ParserBase>: FromParserBase<B, Error = Self::DisconnectSessionExpiryIntervalError>;
-    type DisconnectServerReferenceError;
+    type DisconnectServerReferenceError: Into<Error>;
     type DisconnectServerReference<B: ParserBase>: FromParserBase<B, Error = Self::DisconnectServerReferenceError>;
 
     type AuthReasonCode<B: ParserBase>: FromParserBase<B>;
@@ -115,6 +115,8 @@ pub trait Role {
         header: Header<Self::PacketType>,
         mut data: B,
     ) -> Result<Publish<B, SIS, UPS>> {
+        // TODO check packet type
+
         let len: usize = header
             .remaining_len
             .try_into()
@@ -274,7 +276,7 @@ pub trait Role {
     }
     fn parse_disconnect<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
         header: Header<Self::PacketType>,
-        data: B,
+        mut data: B,
     ) -> Result<
         Disconnect<
             B,
@@ -284,7 +286,82 @@ pub trait Role {
             UPS,
         >,
     > {
-        todo!()
+        // TODO check packet type
+
+        let len: usize = header
+            .remaining_len
+            .try_into()
+            .map_err(|_| Error::PacketTooLarge)?;
+
+        if header.flags != 0 {
+            return Err(Error::InvalidFixedHeaderFlags);
+        }
+
+        let mut backing = match data.split_to_checked(len) {
+            Some(d) => d,
+            None => return Ok(Status::Partial),
+        };
+
+        let data = &mut backing;
+
+        let packet_identifier = PacketIdentifier::parse(data)?;
+
+        let disconnect_reason_code = if len == 0 {
+            Self::DisconnectReasonCode::omitted()
+        } else {
+            Self::DisconnectReasonCode::parse(data)?
+        };
+
+        let properties_length: usize = if len < 2 {
+            0
+        } else {
+            VarByteInt::parse(data)?
+                .try_into()
+                .map_err(|_| Error::InvalidPropertyLength)?
+        };
+
+        if properties_length != data.len() {
+            return Err(todo!("illegal payload"));
+        }
+
+        let properties_data = data;
+
+        let mut session_expiry_interval: Option<Self::DisconnectSessionExpiryInterval<B>> = None;
+        let mut reason_string: Option<ReasonString<B>> = None;
+        let mut user_properties = UPS::default();
+        let mut server_reference: Option<Self::DisconnectServerReference<B>> = None;
+
+        // TODO convert RemainingLengthExceeded to PropertyLengthExceeded here
+        while properties_data.len() > 0 {
+            let property_type = PropertyType::parse(properties_data)?;
+
+            match property_type {
+                PropertyType::SessionExpiryInterval => {
+                    session_expiry_interval.set(properties_data)?
+                }
+                PropertyType::ReasonString => reason_string.set(properties_data)?,
+                PropertyType::UserProperty => {
+                    let user_property = UserProperty::parse(properties_data)?;
+                    if let Some(limit) = UPS::LIMIT
+                        && user_properties.len() == limit
+                    {
+                        // Storage is full
+                    } else {
+                        user_properties.extend(Some(user_property));
+                    }
+                }
+                PropertyType::ServerReference => server_reference.set(properties_data)?,
+                p => return Err(Error::InvalidPropertyType),
+            }
+        }
+
+        Ok(Status::Complete(Disconnect {
+            reason_code: disconnect_reason_code,
+            session_expiry_interval,
+            reason_string,
+            user_properties,
+            server_reference,
+        }))
     }
     fn parse_auth<B: ParserBase>(
         header: Header<Self::PacketType>,
