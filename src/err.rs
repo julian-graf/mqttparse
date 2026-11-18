@@ -67,6 +67,8 @@ pub enum Error {
     IllegalPropertyType,
     /// A property of an MQTTv5 packet is encoded incorrectly.
     InvalidProperty,
+    /// No authentication methid is present in an MQTTv5 AUTH packet.
+    MissingAuthenticationMethod,
     /// The [`MaximumQoS`] property has a value other than [`QoS::AtMostOnce`] and [`QoS::AtLeastOnce`].
     ///
     /// [`MaximumQoS`]: crate::types::v5::property::MaximumQoS
@@ -106,6 +108,7 @@ impl Error {
             Self::DuplicateProperty => "at most once property occured twice",
             Self::IllegalPropertyType => "property type not allowed",
             Self::InvalidProperty => "invalid property encoding",
+            Self::MissingAuthenticationMethod => "missing authentication property",
             Self::InvalidMaximumQoS => "invalid maximum qos",
             Self::PropertyLengthExceeded => "not enough property length to parse property",
         }
@@ -140,6 +143,7 @@ impl Error {
             Self::IllegalPropertyType => ErrorCategory::MalformedPacket,
             // Malformed packet according to <https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901029>
             Self::InvalidProperty => ErrorCategory::MalformedPacket,
+            Self::MissingAuthenticationMethod => ErrorCategory::ProtocolError,
             Self::InvalidMaximumQoS => ErrorCategory::ProtocolError,
             Self::PropertyLengthExceeded => ErrorCategory::MalformedPacket,
         }

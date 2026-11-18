@@ -244,11 +244,11 @@ impl<PEER: Role> Parser<PEER> {
         PEER::parse_disconnect(header, data)
     }
 
-    pub fn parse_auth<B: ParserBase>(
+    pub fn parse_auth<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
         self,
         header: Header<PEER::PacketType>,
         data: B,
-    ) -> Result<Auth<PEER::AuthReasonCode<B>>> {
+    ) -> Result<Auth<PEER::AuthReasonCode<B>, B, UPS>> {
         PEER::parse_auth(header, data)
     }
 }

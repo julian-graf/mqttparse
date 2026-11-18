@@ -53,7 +53,7 @@ pub trait Role {
     type DisconnectServerReferenceError: Into<Error>;
     type DisconnectServerReference<B: ParserBase>: FromParserBase<B, Error = Self::DisconnectServerReferenceError>;
 
-    type AuthReasonCode<B: ParserBase>: FromParserBase<B>;
+    type AuthReasonCode<B: ParserBase>: FromParserBase<B, Error = ReasonCodeError>;
 
     fn packet_type(first_byte: u8) -> core::result::Result<Self::PacketType, Error>;
     fn parse<B, UPS, SIS, SRCS, URCS>(
@@ -363,10 +363,69 @@ pub trait Role {
             server_reference,
         }))
     }
-    fn parse_auth<B: ParserBase>(
+    fn parse_auth<B: ParserBase, UPS: Storage<Element = UserProperty<B>>>(
         header: Header<Self::PacketType>,
-        data: B,
-    ) -> Result<Auth<Self::AuthReasonCode<B>>> {
-        todo!()
+        mut data: B,
+    ) -> Result<Auth<Self::AuthReasonCode<B>, B, UPS>> {
+        let len: usize = header
+            .remaining_len
+            .try_into()
+            .map_err(|_| Error::PacketTooLarge)?;
+
+        if header.flags != 0 {
+            return Err(Error::InvalidFixedHeaderFlags);
+        }
+
+        if len < 5 {
+            return Err(Error::MissingAuthenticationMethod);
+        }
+
+        let mut backing = match data.split_to_checked(len) {
+            Some(d) => d,
+            None => return Ok(Status::Partial),
+        };
+        let data = &mut backing;
+
+        let authenticate_reason_code = Self::AuthReasonCode::parse(data)?;
+        let properties_length: usize = VarByteInt::parse(data)?
+            .try_into()
+            .map_err(|_| Error::InvalidPropertyLength)?;
+        if properties_length != data.len() {
+            return Err(Error::InvalidPropertyLength);
+        }
+        let properties_data = data;
+
+        let mut authentication_method = None;
+        let mut authentication_data = None;
+        let mut reason_string = None;
+        let mut user_properties = UPS::default();
+
+        while properties_data.len() > 0 {
+            let property_type = PropertyType::parse(properties_data)?;
+
+            match property_type {
+                PropertyType::AuthenticationMethod => authentication_method.set(properties_data)?,
+                PropertyType::AuthenticationData => authentication_data.set(properties_data)?,
+                PropertyType::ReasonString => reason_string.set(properties_data)?,
+                PropertyType::UserProperty => {
+                    let user_property = UserProperty::parse(properties_data)?;
+                    if UPS::LIMIT.is_none_or(|l| user_properties.len() < l) {
+                        user_properties.extend(Some(user_property));
+                    }
+                }
+                _ => return Err(Error::InvalidPropertyType),
+            }
+        }
+
+        let authentication_method =
+            authentication_method.ok_or(Error::MissingAuthenticationMethod)?;
+
+        Ok(Status::Complete(Auth {
+            reason_code: authenticate_reason_code,
+            authentication_method,
+            authentication_data,
+            reason_string,
+            user_properties,
+        }))
     }
 }

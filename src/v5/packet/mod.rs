@@ -61,5 +61,5 @@ pub enum Packet<FROM: Role + ?Sized, B: ParserBase, UPS, SIS, SRCS, URCS> {
             UPS,
         >,
     ),
-    Auth(Auth<FROM::AuthReasonCode<B>>),
+    Auth(Auth<FROM::AuthReasonCode<B>, B, UPS>),
 }

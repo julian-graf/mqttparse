@@ -36,9 +36,9 @@ macro_rules! property {
                 crate::types::v5::property::PropertyType::$name;
             type Inner = $inner;
         }
-        impl Into<$inner> for $name {
-            fn into(self) -> $inner {
-                self.0
+        impl From<$name> for $inner {
+            fn from(value: $name) -> Self {
+                value.0
             }
         }
         impl<B: crate::base::ParserBase> crate::base::FromParserBase<B> for $name {
@@ -61,9 +61,9 @@ macro_rules! property {
                 crate::types::v5::property::PropertyType::$name;
             type Inner = $inner<B>;
         }
-        impl<B> Into<$inner<B>> for $name<B> {
-            fn into(self) -> $inner<B> {
-                self.0
+        impl<B> From<$name<B>> for $inner<B> {
+            fn from(value: $name<B>) -> Self {
+                value.0
             }
         }
         impl<B: crate::base::ParserBase> crate::base::FromParserBase<B> for $name<B> {

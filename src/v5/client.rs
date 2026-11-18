@@ -38,9 +38,9 @@ pub enum ClientPacketType {
     Auth = 0xF0,
 }
 
-impl Into<u8> for ClientPacketType {
-    fn into(self) -> u8 {
-        self as u8
+impl From<ClientPacketType> for u8 {
+    fn from(value: ClientPacketType) -> Self {
+        value as u8
     }
 }
 
